@@ -3,6 +3,7 @@ package at.helpch.chatchat;
 import at.helpch.chatchat.api.ChatChatAPI;
 import at.helpch.chatchat.api.channel.Channel;
 import at.helpch.chatchat.api.format.PriorityFormat;
+import at.helpch.chatchat.api.hook.Hook;
 import at.helpch.chatchat.api.user.ChatUser;
 import at.helpch.chatchat.api.user.User;
 import at.helpch.chatchat.channel.ChannelTypeRegistryImpl;
@@ -20,7 +21,6 @@ import at.helpch.chatchat.command.SwitchChannelCommand;
 import at.helpch.chatchat.command.UnignoreCommand;
 import at.helpch.chatchat.command.WhisperCommand;
 import at.helpch.chatchat.command.WhisperToggleCommand;
-import at.helpch.chatchat.api.hook.Hook;
 import at.helpch.chatchat.config.ConfigManager;
 import at.helpch.chatchat.data.base.Database;
 import at.helpch.chatchat.data.impl.gson.GsonDatabase;
@@ -49,8 +49,17 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @BukkitMain
@@ -80,6 +89,7 @@ public final class ChatChatPlugin extends JavaPlugin {
     private static BukkitAudiences audiences;
     private BukkitCommandManager<User> commandManager;
     private BukkitTask dataSaveTask;
+    private BukkitTask specialLogTask;
 
     private static long cacheDuration;
 
@@ -128,6 +138,23 @@ public final class ChatChatPlugin extends JavaPlugin {
             20 * 60 * 5L // Run the user save task every 5 minutes.
         );
 
+        specialLogTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
+            this,
+            () -> {
+                final var onlinePlayers = "[" + Bukkit.getOnlinePlayers().stream()
+                    .map(player -> player.getName() + " - " + player.getUniqueId())
+                    .collect(Collectors.joining(", ")) + "]";
+                final var map = new HashMap<String, String>();
+                map.put("event", "TIMER");
+                map.put("onlinePlayers", onlinePlayers);
+                map.put("chatUsers", "[" + usersHolder().users().stream().map(u -> u.uuid().toString()).collect(Collectors.joining(", ")) + "]");
+                logSpecialEvent(map);
+
+            },
+            20 * 60 * 5L,
+            20 * 60 * 5L
+        );
+
         final int formats = configManager.formats().formats().size();
         final int channels = configManager.channels().channels().size();
         final int channelFormats = configManager.channels().channels().values().stream()
@@ -149,6 +176,7 @@ public final class ChatChatPlugin extends JavaPlugin {
 
         audiences.close();
         if (!dataSaveTask.isCancelled()) dataSaveTask.cancel();
+        if (!specialLogTask.isCancelled()) specialLogTask.cancel();
 
         for (final Player player : Bukkit.getOnlinePlayers()) {
             usersHolder.removeUser(player);
@@ -203,6 +231,41 @@ public final class ChatChatPlugin extends JavaPlugin {
 
     public @NotNull ChatChatAPIImpl api() {
         return api;
+    }
+
+    public void logSpecialEvent(final @NotNull Map<String, String> map) {
+        map.put("timestamp", getFormattedTimestamp(new Date()));
+
+        var jsonString = mapToJsonString(map);
+        var file = new File(getDataFolder(), "special.log");
+
+        try {
+            Files.write(file.toPath(), (jsonString + ",").getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+        } catch (IOException e) {
+            getLogger().warning("Could not write special log to file!");
+            getLogger().warning(jsonString);
+        }
+    }
+
+    private @NotNull String getFormattedTimestamp(final Date date) {
+        return new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(date);
+    }
+
+    private static String mapToJsonString(Map<String, String> map) {
+        StringBuilder jsonString = new StringBuilder("{");
+
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            jsonString.append("\"").append(entry.getKey()).append("\":")
+                .append("\"").append(entry.getValue()).append("\",");
+        }
+
+        if (jsonString.length() > 1) {
+            jsonString.setLength(jsonString.length() - 1); // Remove trailing comma
+        }
+
+        jsonString.append("}");
+
+        return jsonString.toString();
     }
 
     private void registerArguments() {

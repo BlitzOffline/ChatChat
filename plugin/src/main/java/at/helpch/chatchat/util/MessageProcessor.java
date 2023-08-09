@@ -14,11 +14,14 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.minimessage.tag.standard.StandardTags;
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public final class MessageProcessor {
 
@@ -81,6 +84,16 @@ public final class MessageProcessor {
             user.sendMessage(rulesResult.get());
             return false;
         }
+
+        final var onlinePlayers = "[" + Bukkit.getOnlinePlayers().stream()
+            .map(player -> player.getName() + " - " + player.getUniqueId())
+            .collect(Collectors.joining(", ")) + "]";
+        final var map = new HashMap<String, String>();
+        map.put("event", "CHAT");
+        map.put("uuid", user.uuid().toString());
+        map.put("onlinePlayers", onlinePlayers);
+        map.put("chatUsers", "[" + plugin.usersHolder().users().stream().map(u -> u.uuid().toString()).collect(Collectors.joining(", ")) + "]");
+        plugin.logSpecialEvent(map);
 
         final var chatEvent = new ChatChatEvent(
             async,

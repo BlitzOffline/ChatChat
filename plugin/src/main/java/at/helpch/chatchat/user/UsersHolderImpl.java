@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 public final class UsersHolderImpl implements UsersHolder {
@@ -25,6 +26,18 @@ public final class UsersHolderImpl implements UsersHolder {
     public UsersHolderImpl(@NotNull final ChatChatPlugin plugin) {
         this.plugin = plugin;
         users.put(CONSOLE.uuid(), CONSOLE);
+    }
+
+    public @NotNull Optional<User> getOptionalUser(@NotNull final UUID uuid) {
+        return Optional.ofNullable(users.get(uuid));
+    }
+
+    public @NotNull Optional<User> getOptionalUser(@NotNull final CommandSender user) {
+        if (user instanceof ConsoleCommandSender) {
+            return Optional.of(CONSOLE);
+        }
+
+        return getOptionalUser(((Player) user).getUniqueId());
     }
 
     public @NotNull User getUser(@NotNull final UUID uuid) {
